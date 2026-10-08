@@ -166,7 +166,7 @@ export default function NotificationsPage() {
 
     const d = new Date(`${scheduledDate}T${scheduledTime}`);
 
-    return Number.isNaN(d.getTime()) ? null : d;
+    return isNaN(d.getTime()) ? null : d;
   }, [deliveryTiming, scheduledDate, scheduledTime]);
 
   const getEffectiveCampusId = useCallback(() => {
@@ -382,7 +382,7 @@ export default function NotificationsPage() {
         return;
       }
 
-      if (scheduledTarget.getTime() <= Date.now() + 30_000) {
+      if (scheduledTarget.getTime() <= Date.now() + 30000) {
         toast.error(
           'Scheduled broadcast must be at least 30 seconds in the future.'
         );
@@ -464,9 +464,9 @@ export default function NotificationsPage() {
         );
       }
 
-      if (deliveryTiming === 'SCHEDULED' && scheduledForIso) {
+      if (deliveryTiming === 'SCHEDULED') {
         const formattedDate = new Date(
-          scheduledForIso
+          scheduledForIso!
         ).toLocaleString(undefined, {
           dateStyle: 'medium',
           timeStyle: 'short',
@@ -1502,7 +1502,7 @@ export default function NotificationsPage() {
                 a notification to{' '}
                 <span className="font-extrabold text-slate-800">
                   ~
-                  {audienceCount.totalAlumni.toLocaleString()}{' '}
+                  {audienceCount.toLocaleString()}{' '}
                   alumni
                 </span>
                 .

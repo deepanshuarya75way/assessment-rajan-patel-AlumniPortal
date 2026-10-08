@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { batchCampusWhere } from "../auth/staff-auth";
 
 //schedule notifications helper
+//finds notifi where pushStatus->'scheduled and updated them to pending as activated
 export async function activateDueScheduledNotifications(db: PrismaClient): Promise<number>{
   const now = new Date();
 
