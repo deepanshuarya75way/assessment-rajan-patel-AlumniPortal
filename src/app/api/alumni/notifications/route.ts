@@ -91,11 +91,36 @@ export async function GET(req: NextRequest) {
     }
 
     //for visibility of alumni notification
+    //scheduled campaign broadcst remain invisible to alumni until their target 
     const scheduleAndStatusFilter : any [] =[
       {
-        
+        OR: [
+          { pushStatus: null},
+          { pushStatus: { notIn: [PushDeliveryStatus.SCHEDULED, PushDeliveryStatus.CANCELLED]}}
+        ]
+      },
+      {
+        OR: [
+          { scheduledFor: null},
+          { scheduledFor: { lte: now }}
+        ]
       }
-    ]
+    ];
+
+    const whereCondition: any = {
+      audienceTag: { in: userTags },  //match alumni
+      createdAt: { gte: alumniWithCampus.registeredAt ?? alumniWithCampus.createdAt },  
+      userStates: {
+        none: {
+          userId: alumni.id,
+          isDeleted: true
+        }
+      },
+      AND: [
+        ...scheduleAndStatusFilter,
+        ...(cursorFilter ? [cursorFilter]: [])
+      ]
+    };
 
     const [notificationsWithExtra, unreadCount] = await Promise.all([
       prisma.notification.findMany({
@@ -115,7 +140,8 @@ export async function GET(req: NextRequest) {
         where: {
           audienceTag: { in: userTags },
           createdAt: { gt: readThreshold },
-          userStates: { none: { userId: alumni.id, isDeleted: true } }
+          userStates: { none: { userId: alumni.id, isDeleted: true } },
+          AND: scheduleAndStatusFilter
         }
       })
     ]);

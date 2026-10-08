@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentAlumni } from '@/lib/auth/getCurrentAlumni';
 import { prisma } from '@/lib/prisma';
+import { PushDeliveryStatus } from '@prisma/client';
 import { getAlumniAudienceTags } from '@/lib/notifications/tags';
 
 export async function GET() {
@@ -49,6 +50,10 @@ export async function GET() {
 
     const readThreshold = alumniWithCampus.notificationsReadAt ?? alumniWithCampus.registeredAt ?? alumniWithCampus.createdAt;
 
+    const now = new Date();
+
+    //again visibility filtering for unread notifi. counts 
+    //alumni unread count can't update before delivery
     const unreadCount = await prisma.notification.count({
       where: {
         audienceTag: { in: userTags },
@@ -58,7 +63,21 @@ export async function GET() {
             userId: alumni.id,
             isDeleted: true
           }
-        }
+        },
+        AND: [
+          {
+            OR: [
+              { pushStatus: null},
+              { pushStatus: { notIn: [PushDeliveryStatus.SCHEDULED, PushDeliveryStatus.CANCELLED]}}
+            ]
+          },
+          {
+            OR: [
+              { scheduledFor: null},
+              { scheduledFor: { lte: now }}
+            ]
+          }
+        ]
       }
     });
 
