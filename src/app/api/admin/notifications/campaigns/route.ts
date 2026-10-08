@@ -5,10 +5,19 @@ import { buildAlumniWhere, CampaignAudienceFilter } from '@/lib/notifications/bu
 import { NotificationType } from '@prisma/client';
 import { triggerNotification } from '@/lib/notifications/triggerNotification';
 
+import { activateDueScheduledNotifications } from '@/lib/notifications/scheduledNotifications';
+
 export async function GET(req: NextRequest) {
   const staff = await getAuthenticatedStaff();
   if (!staff) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  //activate notifi if reached time: as prisma make it auto trigger
+  try{
+    await activateDueScheduledNotifications(prisma);
+  }catch(error){
+    console.warn("error checking scheduled notification:", error);
   }
 
   const { searchParams } = new URL(req.url);
@@ -62,13 +71,15 @@ export async function GET(req: NextRequest) {
       const sentCount = related.reduce((sum, r) => sum + r.sentCount, 0);
       const failedCount = related.reduce((sum, r) => sum + r.failedCount, 0);
       
-      // Determine worst-case push status
+      // Determine all push status for campaigns
       const statuses = related.map((r) => r.pushStatus);
       let pushStatus = notif.pushStatus;
       if (statuses.includes('PROCESSING')) {
         pushStatus = 'PROCESSING';
       } else if (statuses.includes('PENDING')) {
         pushStatus = 'PENDING';
+      }else if(statuses.includes('SCHEDULED')){
+          pushStatus = 'SCHEDULED';
       } else if (statuses.includes('FAILED')) {
         pushStatus = 'FAILED';
       } else if (statuses.every((s) => s === 'COMPLETED')) {
@@ -77,6 +88,7 @@ export async function GET(req: NextRequest) {
 
       return {
         id: notif.id,
+        campaignGroupId: notif.campaignGroupId, 
         type: notif.type,
         title: notif.title,
         body: notif.body,
@@ -84,6 +96,7 @@ export async function GET(req: NextRequest) {
         metadata: notif.metadata,
         audienceTag: notif.audienceTag,
         createdAt: notif.createdAt,
+        scheduledFor: notif.scheduledFor,
         channel: notif.channel,
         filter: notif.filter,
         pushStatus,
@@ -120,7 +133,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { title, body: content, url, type = NotificationType.ADMIN_ANNOUNCEMENT, channel, filter = {} } = body;
+    const { title, body: content, url, type = NotificationType.ADMIN_ANNOUNCEMENT, channel, filter = {}, scheduledFor } = body;
 
     if (!title || !title.trim()) {
       return NextResponse.json({ error: 'Notification title is required' }, { status: 400 });
@@ -128,6 +141,26 @@ export async function POST(req: NextRequest) {
 
     if (!content || !content.trim()) {
       return NextResponse.json({ error: 'Notification body is required' }, { status: 400 });
+    }
+
+    //validate scheduled date.time 
+    let targetScheduledDate: Date | null = null;
+    if(scheduledFor){
+      targetScheduledDate = new Date(scheduledFor);
+       if (isNaN(targetScheduledDate.getTime())) {
+          return NextResponse.json(
+            { error: 'Invalid scheduled date/time.' },
+            { status: 400 }
+          );
+        }
+
+      //scheduled time in future
+      if(targetScheduledDate.getTime() <= Date.now() + 30000){
+        return NextResponse.json(
+          {error: "scheduled time must be atleats 30 sec ahead of curr"},
+          { status: 400}
+        )
+      }
     }
 
     // Enforce campus scoping
@@ -159,7 +192,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Call unified triggerNotification helper
+    // Call unified triggerNotification helper + scheduled date/time
     const campaign = await triggerNotification({
       type: type in NotificationType ? type : NotificationType.ADMIN_ANNOUNCEMENT,
       channel: channel === 'INAPP_ONLY' ? 'INAPP_ONLY' : 'PUSH_AND_INAPP',
@@ -170,6 +203,7 @@ export async function POST(req: NextRequest) {
       createdById: staff.id,
       staffRole: staff.role,
       staffCampusId: staff.campusId || undefined,
+      scheduledFor: targetScheduledDate,
     });
 
     return NextResponse.json(
@@ -181,6 +215,7 @@ export async function POST(req: NextRequest) {
           pushStatus: campaign.pushStatus,
           totalTargets,
           createdAt: campaign.createdAt,
+          scheduledFor: campaign.scheduledFor,
         },
       },
       { status: 202 }
@@ -193,3 +228,6 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+
+//either we can make delete notification campaign is admin want 

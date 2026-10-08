@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentAlumni } from '@/lib/auth/getCurrentAlumni';
 import { prisma } from '@/lib/prisma';
+import { PushDeliveryStatus } from '@prisma/client';
 import { getAlumniAudienceTags } from '@/lib/notifications/tags';
 
 export async function GET(req: NextRequest) {
@@ -53,16 +54,22 @@ export async function GET(req: NextRequest) {
 
     const readThreshold = alumniWithCampus.notificationsReadAt ?? alumniWithCampus.registeredAt ?? alumniWithCampus.createdAt;
 
-    let whereCondition: any = {
-      audienceTag: { in: userTags },
-      createdAt: { gte: alumniWithCampus.registeredAt ?? alumniWithCampus.createdAt },
-      userStates: {
-        none: {
-          userId: alumni.id,
-          isDeleted: true
-        }
-      }
-    };
+    const now = new Date();
+
+    //for cursor pagination not like offset
+    let cursorFilter : any = null;
+
+
+    // let whereCondition: any = {
+    //   audienceTag: { in: userTags },
+    //   createdAt: { gte: alumniWithCampus.registeredAt ?? alumniWithCampus.createdAt },
+    //   userStates: {
+    //     none: {
+    //       userId: alumni.id,
+    //       isDeleted: true
+    //     }
+    //   }
+    // };
 
     if (cursor) {
       const cursorItem = await prisma.notification.findUnique({
@@ -71,8 +78,7 @@ export async function GET(req: NextRequest) {
       });
       
       if (cursorItem) {
-        whereCondition = {
-          ...whereCondition,
+        cursorFilter = {
           OR: [
             { createdAt: { lt: cursorItem.createdAt } },
             {
@@ -83,6 +89,13 @@ export async function GET(req: NextRequest) {
         };
       }
     }
+
+    //for visibility of alumni notification
+    const scheduleAndStatusFilter : any [] =[
+      {
+        
+      }
+    ]
 
     const [notificationsWithExtra, unreadCount] = await Promise.all([
       prisma.notification.findMany({

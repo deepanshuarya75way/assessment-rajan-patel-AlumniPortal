@@ -89,9 +89,11 @@ enum NotificationChannel {
 }
 
 enum PushDeliveryStatus {
+  SCHEDULED
   PENDING
   PROCESSING
   COMPLETED
+  CANCELLED
   FAILED
 }
 
@@ -1105,6 +1107,7 @@ model Notification {
   failedCount    Int                  @default(0)
   startedAt      DateTime?
   completedAt    DateTime?
+  scheduledFor   DateTime?
 
   createdById    String?
   createdBy      Staff?               @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1118,6 +1121,7 @@ model Notification {
   @@index([targetUserId])
   @@index([pushStatus])
   @@index([campaignGroupId])
+  @@index([scheduledFor])
   @@map("notifications")
 }
 

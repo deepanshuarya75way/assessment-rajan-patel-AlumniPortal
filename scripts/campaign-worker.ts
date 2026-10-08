@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import cron from 'node-cron';
 import { processCampaignBatch } from '../src/lib/notifications/processCampaignBatch';
+//importing activateSchedule
+import { activateDueScheduledNotifications } from '../src/lib/notifications/scheduledNotifications';
 
 // Standalone PrismaClient with dedicated pool (independent of Next.js / iisnode)
 const prisma = new PrismaClient({
@@ -18,6 +20,13 @@ async function runWorkerTick() {
 
   isRunning = true;
   try {
+    //checking and activate scheduled one if time reached
+    const activatedCount = await activateDueScheduledNotifications(prisma);
+    if(activatedCount>0){
+      console.log(`Worker Activated ${activatedCount} scheduled notifi. that reached execution time`);
+    }
+
+    //fetching active one's
     const activeCampaigns = await prisma.notification.findMany({
       where: {
         pushStatus: { in: ['PENDING', 'PROCESSING'] },
