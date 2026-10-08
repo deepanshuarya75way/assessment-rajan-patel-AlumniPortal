@@ -49,37 +49,51 @@ export async function activateDueScheduledNotifications(db: PrismaClient): Promi
 
 // Cancel all notifications belonging to a scheduled campaign.
 // Only notifications still in SCHEDULED state can be cancelled.
-// export async function cancelScheduledCampaign(
-//   db: PrismaClient,
-//   campaignGroupId: string,
-//   staffId: string,
-//   isAdmin: boolean
-// ): Promise<{success: boolean; count: number; error?: string}> {
+export async function cancelScheduledCampaign(
+  db: PrismaClient,
+  campaignGroupId: string,
+  staffId: string,
+  isAdmin: boolean
+): Promise<{success: boolean; count: number; error?: string}> {
 
-//   //matching schedules notifications
+  //matching schedules notifications
+  const where: any={
+    campaignGroupId,
+    pushStatus: 'SCHEDULED',
+  }
   
-//   if(!isAdmin){
-//     where.createdById = staffId;
-//   }
+  //admin can campaign they own
+  if(!isAdmin){
+    where.createdById = staffId;
+  }
 
-//   const scheduledRow = await db.notification.findMany({
-    
-//   })
+  const scheduledRows = await db.notification.findMany({
+    where,
+    select: {id: true},
+  })
 
-//   const updateResult = await db.notification.updateMany({
-//     where: {
-//       campaignGroupId,
-//       pushStatus: "SCHEDULED",
-//     },
-//     data: {
-//       pushStatus: "CANCELLED",
-//     },
-//   });
+  if(scheduledRows.length===0){
+    return {
+      success: false,
+      count: 0,
+      error: "No scheduled notification for this campaign"
+    };
+  }
 
-//   console.log(
-//     `Scheduled campaign ${campaignGroupId} cancelled: ` +
-//     `${updateResult.count} notification(s)`
-//   );
+  const ids = scheduledRows.map((r)=> r.id);
 
-//   return updateResult.count;
-// }
+  const updateResult = await db.notification.updateMany({
+    where: {
+      id: {in: ids},
+      pushStatus: "SCHEDULED",
+    },
+    data: {
+      pushStatus: "CANCELLED",
+    },
+  });
+
+  return {
+    success: true, 
+    count: updateResult.count,
+  };
+}

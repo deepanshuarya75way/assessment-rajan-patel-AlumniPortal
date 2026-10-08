@@ -5,7 +5,7 @@ import { buildAlumniWhere, CampaignAudienceFilter } from '@/lib/notifications/bu
 import { NotificationType } from '@prisma/client';
 import { triggerNotification } from '@/lib/notifications/triggerNotification';
 
-import { activateDueScheduledNotifications } from '@/lib/notifications/scheduledNotifications';
+import { activateDueScheduledNotifications, cancelScheduledCampaign } from '@/lib/notifications/scheduledNotifications';
 
 export async function GET(req: NextRequest) {
   const staff = await getAuthenticatedStaff();
@@ -230,4 +230,73 @@ export async function POST(req: NextRequest) {
 }
 
 
-//either we can make delete notification campaign is admin want 
+//either admin can delete notification campaign before delivered if anything need update
+export async function DELETE(req: NextRequest) {
+  const staff = await getAuthenticatedStaff();
+
+  if (!staff) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
+    const { searchParams } = new URL(req.url);
+    const campaignGroupId = searchParams.get('campaignGroupId');
+    const id = searchParams.get('id');
+
+    if (!campaignGroupId && !id) {
+      return NextResponse.json(
+        { error: 'campaignGroupId and group ID is required' },
+        { status: 400 }
+      );
+    }
+
+    try{
+      let targetGroupId = campaignGroupId;
+      if(!targetGroupId && id){
+        const notif = await prisma.notification.findUnique({
+          where: { id},
+          select: { campaignGroupId: true},
+        });
+        targetGroupId = notif?.campaignGroupId || null;
+      }
+
+      if(!targetGroupId){
+        return NextResponse.json({ error: "Campaign not found"}, {status: 404});
+      }
+
+      // Cancel scheduled campaign.
+      // ADMIN can cancel any campaign.
+      // Non-admin can only cancel campaigns they created.
+      const result = await cancelScheduledCampaign(
+        prisma,
+        targetGroupId,
+        staff.id,
+        staff.role === 'ADMIN'
+      );
+
+      if (!result.success) {
+        return NextResponse.json(
+          {
+            error: result.error || 'Unable to cancel campaign',
+          },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Scheduled notification cancelled successfully',
+        cancelledCount: result.count,
+      });
+
+    }catch (err: unknown) {
+    console.error('Error cancelling notification campaign:', err);
+
+    return NextResponse.json(
+      { error: 'Failed to cancel notification campaign' },
+      { status: 500 }
+    );
+  }
+}
